@@ -35,9 +35,6 @@ function getRandomInt(max) {
     return Math.floor(Math.random() * Math.floor(max)) + 100;
   }
 
-app.get('/', (req, res) => {
-    res.send('<h1>Hello World!</h1>')
-})
   
 app.get('/api/persons', (req, res) => {
     res.json(persons)
