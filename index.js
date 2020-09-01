@@ -1,93 +1,102 @@
 const express = require('express');
 const morgan = require('morgan');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const Person = require('./models/person');
 
 app.use(express.json());
 morgan.token('body', (req, res) => JSON.stringify(req.body));
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body :req[content-length]'));
 app.use(express.static('build'));
 
-let persons = [
-    {
-        name: "Moran Elad",
-        number: "054-9087978",
-        id: 1
-    },
-    {
-        name: "Omer Elad",
-        number: "054-2094747",
-        id: 2
-    },
-    {
-        name: "Amit Elad",
-        number: "054-2848441",
-        id: 3
-    },
-    {
-        name: "Tomer Elad",
-        number: "054-2848600",
-        id: 4
-    }
-]
-
-function getRandomInt(max) {
-    return Math.floor(Math.random() * Math.floor(max)) + 100;
-  }
-
-  
 app.get('/api/persons', (req, res) => {
-    res.json(persons)
-})
+  Person.find({}).then((persons) => {
+    res.json(persons);
+  });
+});
 
 app.get('/info', (req, res) => {
-    const date = new Date()
+  const date = new Date();
+  Person.find({}).then((persons) => {
     res.send(
-        `<p>Phonebook has info for ${persons.length} people</p>
-        <p>${date.toString()}</p>`
-    )
-})
+      `<p>Phonebook has info for ${persons.length} people</p>
+            <p>${date.toString()}</p>`,
+    );
+  });
+});
 
-app.get('/api/persons/:id', (req, res) => {
-    const idParam = Number(req.params.id);
-    const person = persons.find(person => idParam === person.id)
-
-    if(person) {
-        res.json(person);
+app.get('/api/persons/:id', (req, res, next) => {
+  Person.findById(req.params.id).then((person) => {
+    if (person) {
+      res.json(person);
     } else {
-        res.status(404).end();
+      res.status(404).end();
     }
-})
+  }).catch((error) => next(error));
+});
 
-app.delete('/api/persons/:id', (req, res) => {
-    const idParam = Number(req.params.id);
-    persons = persons.filter(person => idParam !== person.id)
-
-        res.status(204).end();
-    }
-)
+app.delete('/api/persons/:id', (req, res, next) => {
+  Person.findByIdAndRemove(req.params.id).then((result) => {
+    res.status(204).end();
+  }).catch((error) => next(error));
+});
 
 app.post('/api/persons', (req, res) => {
-    if (!req.body.name || !req.body.number) {
-        return res.status(400).json({error: "content missing"});
+  const newPersonData = req.body;
+  if (newPersonData.name === {} || newPersonData.number === {}) {
+    return res.status(400).json({ error: 'content missing' });
+  }
+  Person.find({}).then((persons) => {
+    if (persons.some((person) => person.name === newPersonData.name)) {
+      return res.status(400).json({ error: 'name must be unique' });
     }
+    const person = new Person({
+      name: newPersonData.name,
+      number: newPersonData.number,
+    });
+    person.save().then((savedPerson) => {
+      res.json(savedPerson);
+    });
+  });
+});
 
-    if (persons.some(person => person.name === req.body.name)) {
-        return res.status(400).json({error: "name must be unique"});
+app.put('/api/persons/:id', (req, res, next) => {
+  const { body } = req;
 
-    }
-    const newPerson = {
-        name: req.body.name,
-        number: req.body.number,
-        id: getRandomInt(10000)
-    }
+  const person = {
+    name: body.name,
+    number: body.number,
+  };
 
-    persons.push(newPerson);
+  Person.findByIdAndUpdate(req.params.id, person, { new: true })
+    .then((updatedPerson) => {
+      res.json(updatedPerson);
+    })
+    .catch((error) => next(error));
+});
 
-    res.json(newPerson);
-})
+const unknownEndpoint = (request, response) => {
+  response.status(404).send({ error: 'unknown endpoint' });
+};
 
-  
+// handler of requests with unknown endpoint
+app.use(unknownEndpoint);
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message);
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'malformatted id' });
+  }
+
+  next(error);
+};
+
+// handler of requests with result to errors
+app.use(errorHandler);
+
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`)
-})
+  console.log(`Server running on port ${PORT}`);
+});
